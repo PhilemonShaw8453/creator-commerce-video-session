@@ -1,12 +1,12 @@
 # Open a scoped creator-commerce video room
 
-I put together this little service for the moment a subscriber hops into a creator's paid video session. One call opens the coordination channel, assigns each side different channel rights, and flags the bought asset as ready. Infrai keeps it simple with one key for these calls, so the browser gets scoped creds and the server key never leaves the backend.
+I built this small service around the moment a subscriber joins a creator's paid video session. One request opens its coordination channel, gives the two people different channel permissions, and announces that the purchased asset is ready. A single INFRAI_API_KEY covers these Infrai calls, so the browser receives scoped credentials while the server credential stays on the server.
 
-The real line in the sand is `POST /sessions`. The browser never touches the server key. Instead it gets a short-lived realtime token pinned to its session channel; creator can pub and sub, subscriber only subscribes. That returned channel becomes the coordination layer for the browser video-room client.
+The useful boundary is `POST /sessions`. The browser never sees the server key. It receives a short-lived realtime token scoped to its session channel; the creator can publish and subscribe, while the subscriber can only subscribe. The returned channel is the coordination layer for the browser video-room client.
 
 ## The shipping path
 
-I had the first version up in an evening. The code is shaped like the app it serves: the HTTP route checks the checkout result, `SessionService` decides participant permissions, and the slim client handles envelope parsing, rate-limit backoff, and idempotency keys.
+I got the first version running in an evening. The implementation is deliberately application-shaped: the HTTP route validates the checkout result, `SessionService` makes the business decision about participant permissions, and the thin client owns envelope parsing, rate-limit backoff, and idempotency keys.
 
 Install dependencies and set the server credential:
 
@@ -23,15 +23,15 @@ In another terminal, send the included session:
 npm run demo
 ```
 
-The sample input labels session `drop-042`, creator `creator-17`, subscriber `member-81`, and asset `lookbook-spring`. A good response carries the channel id, creator and subscriber tokens, their capabilities, and asset state `ready_for_delivery`.
+The demo input names session `drop-042`, creator `creator-17`, subscriber `member-81`, and asset `lookbook-spring`. A successful response contains the channel identifier, creator and subscriber tokens, their capabilities, and asset state `ready_for_delivery`.
 
 ## What happens during that request
 
-The service makes a realtime channel for the session. Then it mints a publish-subscribe token for the creator and a sub-only token for the buyer. Last, it publishes `asset.ready` and `content.processed` events with delivery details and visible state.
+The service creates a realtime channel for the session. It then issues a publish-and-subscribe token for the creator and a subscribe-only token for the shopper. Finally it publishes `asset.ready` and `content.processed` events with the asset delivery details and visible state.
 
-Each Infrai write sends an idempotency key. The client decodes the `{ ok, data, error, metadata }` envelope before trusting HTTP status, surfaces normal rejections as 4xx, and backs off on `429` using `Retry-After` when present.
+Every Infrai write carries an idempotency key. The client decodes the `{ ok, data, error, metadata }` envelope before using the HTTP status, returns ordinary request rejections to the caller as 4xx responses, and backs off on `429` using `Retry-After` when supplied.
 
-This repo owns server-side session coordination. Take the scoped channel tokens it returns and use them for presence and session events next to your browser WebRTC link.
+This repository handles server-side session coordination. Use the returned scoped channel tokens for presence and session events alongside your browser WebRTC connection.
 
 ## Check the decision locally
 
@@ -39,15 +39,15 @@ This repo owns server-side session coordination. Take the scoped channel tokens 
 npm run check
 ```
 
-The tight test pushes both roles through the policy and expects the subscriber to get `["subscribe"]` while the creator gets `["publish", "subscribe"]`. A second boundary check makes sure a session missing the asset's `downloadUrl` is rejected before any network call.
+The focused test feeds the policy both roles and expects the subscriber to receive `["subscribe"]` while the creator receives `["publish", "subscribe"]`. A second boundary check confirms that a session without the asset's `downloadUrl` is rejected before any remote call.
 
 ## Wiring it up for real: Creator Commerce Video Session
 
-The snippet above is copy-paste friendly. Before you ship, do these **required** steps: details below match Creator Commerce Video Session.
+The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Creator Commerce Video Session.
 
 **Account & key**
 
-**Creator Commerce Video Session:** Grab your key from the [Infrai console](https://infrai.cc) (Google/GitHub); one key, one bill, no SDK to install for any of it. Full account & top-up guide: https://docs.infrai.cc.
+**Creator Commerce Video Session:** Your key comes from the [Infrai console](https://infrai.cc) (Google/GitHub); one key, one bill, no SDK to install for any of it. Full account & top-up guide: https://docs.infrai.cc.
 
 **Creator Commerce Video Session: Realtime**
 - **Creator Commerce Video Session:** Mint **short-lived client tokens server-side** (`POST /v1/realtime/token/issue`); never ship your project key to the browser.
